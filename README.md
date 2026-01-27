@@ -14,6 +14,6 @@ Here are some ideas to get you started:
 - 😄 Pronouns: ...
 - ⚡ Fun fact: ...
 -->
-![capsule-render api](https://capsule-render.vercel.app/api?type=soft&color=auto&height=300&section=header&text=scm%20render&fontSize=90)
+![capsule-render api](https://capsule-render.vercel.app/api?type=soft&color=auto&height=300&section=header&text=수요%20재고이관%20예측&fontSize=90)
 
  
