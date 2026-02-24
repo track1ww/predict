@@ -202,9 +202,7 @@ lag_7              ██████
 ```
 order_plan_20260102.xlsx   # 발주 계획 (전체 / 발주필요 / 피처중요도 / 요약 시트)
 order_plan_20260102.csv    # 발주 계획 CSV
-lgb_demand_model.pkl       # 학습된 모델
-lgb_demand_model.txt       # LightGBM 텍스트 형식 모델
-bias_correction.pkl        # 카테고리별 편향 보정 계수
+
 ```
 
 ---
