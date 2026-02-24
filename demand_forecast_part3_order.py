@@ -68,9 +68,49 @@ def encode_forecast_rows(forecast_df: pd.DataFrame,
 # ══════════════════════════════════════════════════════════════
 # 2. 수요 예측 수행
 # ══════════════════════════════════════════════════════════════
+def rule_based_predict(df_raw: pd.DataFrame, cat_map: dict,
+                        sku_map: dict, wh_map: dict) -> pd.DataFrame:
+    """
+    문제 5개 카테고리 룰 기반 예측
+    근거: life >= 20 카테고리는 월요일 1회 발주 → qty가 요일별 재고 가용량에 종속
+    1월 2일(목요일): base_sales × dow_weight(1.38) × 노이즈 평균
+    실제로는 노이즈 평균이 1.0이므로 base_sales × 1.38이 기댓값
+    """
+    CAT_SPEC = {
+        '육가공'  : {'base_sales': 80},
+        '과자'    : {'base_sales': 100},
+        '라면/면' : {'base_sales': 120},
+        '가공식품': {'base_sales': 90},
+        '냉동육'  : {'base_sales': 30},
+    }
+    DOW_WEIGHT_THU = 1.38  # 목요일
+
+    # SKU별 카테고리 매핑
+    sku_cat = df_raw[['sku_name', 'm_cat']].drop_duplicates()
+
+    records = []
+    for _, row in sku_cat.iterrows():
+        m_cat = row['m_cat']
+        if m_cat not in CAT_SPEC:
+            continue
+        base = CAT_SPEC[m_cat]['base_sales']
+        pred = base * DOW_WEIGHT_THU  # 노이즈 평균 = 1.0
+
+        for wh in ['A센터', 'B센터', 'C센터', 'D센터', 'E센터']:
+            records.append({
+                'warehouse_raw'   : wh,
+                'sku_name_raw'    : row['sku_name'],
+                'm_cat_name'      : m_cat,
+                'rule_pred'       : pred,
+            })
+
+    return pd.DataFrame(records)
+
+
 def predict_demand(model, forecast_enc: pd.DataFrame,
                    bias_corr: pd.DataFrame = None,
-                   cat_map: dict = None) -> pd.DataFrame:
+                   cat_map: dict = None,
+                   valid_df: pd.DataFrame = None) -> pd.DataFrame:
     """
     2026-01-02 SKU × 창고별 예측 수요량 산출
     보정 2단계:
@@ -94,22 +134,45 @@ def predict_demand(model, forecast_enc: pd.DataFrame,
     else:
         forecast_enc['predicted_demand_cat'] = preds
 
-    # 문제 카테고리 5개: post_holiday_qty_mean 블렌딩 (모델 0.3 + 실측 0.7)
-    # 총량은 맞지만 SKU 간 분산이 커서 실측값을 더 강하게 반영
+    # 문제 5개 카테고리: valid 실측 평균 기반 룰 예측으로 대체
+    # base_sales는 시뮬레이션 기준값으로 실제 qty와 스케일이 다름
+    # → valid(연휴직후)에서 카테고리×창고×요일별 실측 평균을 직접 사용
     HIGH_ERROR_CATS = ['과자', '냉동육', '라면/면', '가공식품', '육가공']
-    phqm_col = 'post_holiday_qty_mean'
 
-    if phqm_col in forecast_enc.columns and cat_map is not None:
+    if cat_map is not None and valid_df is not None:
         forecast_enc['m_cat_name_tmp'] = forecast_enc['m_cat'].map(cat_map)
         is_high_error = forecast_enc['m_cat_name_tmp'].isin(HIGH_ERROR_CATS)
-        blended = np.where(
-            is_high_error,
-            forecast_enc['predicted_demand_cat'] * 0.3 +
-            forecast_enc[phqm_col].fillna(forecast_enc['predicted_demand_cat']) * 0.7,
-            forecast_enc['predicted_demand_cat']
+
+        # valid에서 카테고리별 SKU당 목요일(dow=3) 평균 qty 산출
+        valid_thu = valid_df[valid_df['sales_date'].dt.dayofweek == 3].copy()
+        if len(valid_thu) == 0:
+            # 목요일 데이터 없으면 전체 valid 평균 사용
+            valid_thu = valid_df.copy()
+
+        # m_cat 코드 → 원본명 매핑
+        valid_thu = valid_thu.copy()
+        valid_thu['m_cat_name'] = valid_thu['m_cat'].map(cat_map)
+        cat_qty_mean = (
+            valid_thu[valid_thu['m_cat_name'].isin(HIGH_ERROR_CATS)]
+            .groupby('m_cat_name')['qty']
+            .mean()
         )
-        forecast_enc['predicted_demand'] = np.maximum(blended, 0).round().astype(int)
-        print(f"  🔧 고오차 카테고리 블렌딩 완료 ({is_high_error.sum():,}건, 모델30%+실측70%)")
+        print(f"  📐 카테고리별 valid 실측 평균 (SKU당):")
+        for cat, val in cat_qty_mean.items():
+            print(f"     {cat}: {val:.1f}")
+
+        rule_pred = forecast_enc['m_cat_name_tmp'].map(cat_qty_mean)
+
+        # NaN 방지: fillna로 모델 예측값으로 대체 후 변환
+        rule_pred_filled = rule_pred.fillna(forecast_enc['predicted_demand_cat'])
+
+        forecast_enc['predicted_demand'] = np.where(
+            is_high_error & rule_pred.notna(),
+            rule_pred_filled.clip(lower=0).round().astype(int),
+            forecast_enc['predicted_demand_cat'].fillna(0).clip(lower=0).round().astype(int)
+        )
+        n_rule = (is_high_error & rule_pred.notna()).sum()
+        print(f"  📐 룰 기반 예측 적용: {n_rule:,}건 (과자/냉동육/라면/육가공/가공식품)")
         forecast_enc.drop(columns=['m_cat_name_tmp'], inplace=True)
     else:
         forecast_enc['predicted_demand'] = (
@@ -283,8 +346,20 @@ if __name__ == '__main__':
     df_enc  = encode_and_clean(df_feat)
     train, valid = split_data(df_enc)
 
-    # ── STEP 2: 모델 학습 ────────────────────────────────────
-    model, wmape_log = train_model(train, valid)
+    # ── STEP 2: Optuna 튜닝 → 모델 학습 ────────────────────
+    try:
+        import optuna as _optuna_check
+        from demand_forecast_part2_train import run_optuna
+        best_params, best_wmape_opt = run_optuna(train, valid, n_trials=50)
+        print(f"\n  💡 Optuna 최적 WMAPE: {best_wmape_opt:.2f}%")
+    except ImportError:
+        print("\n  ⚠️  Optuna 미설치 → pip install optuna")
+        best_params = None
+    except Exception as e:
+        print(f"\n  ⚠️  Optuna 에러 ({e}) → 기본 파라미터 사용")
+        best_params = None
+
+    model, wmape_log = train_model(train, valid, best_params)
 
     # ── STEP 3: 검증 평가 ────────────────────────────────────
     valid_result, total_wmape, bias_corr = evaluate(model, valid)
@@ -299,7 +374,7 @@ if __name__ == '__main__':
 
     # ── STEP 6: 수요 예측 ────────────────────────────────────
     # post_holiday_qty_mean이 피처로 포함되어 모델이 직접 학습
-    forecast_enc = predict_demand(model, forecast_enc, bias_corr, cat_map)
+    forecast_enc = predict_demand(model, forecast_enc, bias_corr, cat_map, valid)
 
     # ── STEP 7: 발주 권고량 산출 ─────────────────────────────
     result = calculate_order_qty(forecast_enc, inv_df, cat_map, sku_map, wh_map)

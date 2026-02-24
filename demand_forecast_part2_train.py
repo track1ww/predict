@@ -57,9 +57,100 @@ CATEGORICAL_FEATURES = ['warehouse', 'm_cat', 'season_name']
 
 
 # ══════════════════════════════════════════════════════════════
-# 2. 모델 학습
+# 2. Optuna 하이퍼파라미터 튜닝
 # ══════════════════════════════════════════════════════════════
-def train_model(train: pd.DataFrame, valid: pd.DataFrame):
+def run_optuna(train: pd.DataFrame, valid: pd.DataFrame,
+               n_trials: int = 50) -> dict:
+    """
+    Optuna로 LightGBM 하이퍼파라미터 최적화
+    목적함수: 연휴 직후 검증셋 WMAPE 최소화
+    """
+    import optuna
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+    X_train = train[FEATURE_COLS]
+    y_train = train[TARGET_COL]
+    X_valid = valid[FEATURE_COLS]
+    y_valid = valid[TARGET_COL]
+
+    max_date = train['sales_date'].max()
+    days_from_max = (max_date - train['sales_date']).dt.days
+    sample_weight = np.exp(-days_from_max / 45)
+
+    def objective(trial):
+        params = {
+            # 고정
+            'objective'              : 'tweedie',
+            'metric'                 : 'rmse',
+            'verbosity'              : -1,
+            'random_state'           : 42,
+            'n_jobs'                 : -1,
+            'max_bin'                : 255,
+            # 탐색 (이전 best 근방 정밀 탐색)
+            # best: num_leaves=221, lr=0.049, max_depth=10, min_child=110
+            'tweedie_variance_power' : trial.suggest_float('tweedie_variance_power', 1.0, 1.5),
+            'num_leaves'             : trial.suggest_int('num_leaves', 63, 255),
+            'max_depth'              : trial.suggest_int('max_depth', 6, 12),
+            'min_child_samples'      : trial.suggest_int('min_child_samples', 20, 200),
+            'learning_rate'          : trial.suggest_float('learning_rate', 0.02, 0.1, log=True),
+            'subsample'              : trial.suggest_float('subsample', 0.6, 0.85),
+            'colsample_bytree'       : trial.suggest_float('colsample_bytree', 0.65, 0.85),
+            'reg_alpha'              : trial.suggest_float('reg_alpha', 1e-3, 0.1, log=True),
+            'reg_lambda'             : trial.suggest_float('reg_lambda', 0.3, 1.0, log=True),
+            'cat_smooth'             : trial.suggest_int('cat_smooth', 12, 20),
+        }
+
+        dtrain = lgb.Dataset(
+            X_train, label=y_train,
+            weight=sample_weight,
+            categorical_feature=CATEGORICAL_FEATURES,
+            free_raw_data=False,
+            params={'max_bin': 255}
+        )
+        dvalid = lgb.Dataset(
+            X_valid, label=y_valid,
+            reference=dtrain,
+            categorical_feature=CATEGORICAL_FEATURES,
+            free_raw_data=False,
+            params={'max_bin': 255}
+        )
+
+        callbacks = [
+            lgb.early_stopping(stopping_rounds=200, verbose=False),
+            lgb.log_evaluation(period=-1),
+        ]
+
+        model = lgb.train(
+            params=params,
+            train_set=dtrain,
+            num_boost_round=5000,
+            valid_sets=[dvalid],
+            callbacks=callbacks,
+        )
+
+        preds = np.maximum(model.predict(X_valid), 0)
+        return wmape(y_valid.values, preds)
+
+    print(f"\n🔍 Optuna 하이퍼파라미터 탐색 시작 ({n_trials} trials)...")
+    study = optuna.create_study(direction='minimize',
+                                 sampler=optuna.samplers.TPESampler(seed=42))
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
+
+    best = study.best_params
+    best_wmape = study.best_value
+    print(f"\n  ✅ Optuna 완료 | Best WMAPE: {best_wmape:.2f}%")
+    print(f"  📋 Best params:")
+    for k, v in best.items():
+        print(f"     {k}: {v}")
+
+    return best, best_wmape
+
+
+# ══════════════════════════════════════════════════════════════
+# 3. 모델 학습 (Optuna 결과 또는 기본 파라미터 사용)
+# ══════════════════════════════════════════════════════════════
+def train_model(train: pd.DataFrame, valid: pd.DataFrame,
+                best_params: dict = None):
     print("=" * 60)
     print("🤖 LightGBM 모델 학습 시작...")
 
@@ -68,7 +159,23 @@ def train_model(train: pd.DataFrame, valid: pd.DataFrame):
     X_valid = valid[FEATURE_COLS]
     y_valid = valid[TARGET_COL]
 
-    # 시간 가중치: 최근 60일 강조
+    # Optuna 결과 파라미터 또는 기본값 사용
+    if best_params is not None:
+        params = {
+            'objective'              : 'tweedie',
+            'metric'                 : 'rmse',
+            'verbosity'              : -1,
+            'random_state'           : 42,
+            'n_jobs'                 : -1,
+            'max_bin'                : 255,
+            **best_params,
+        }
+        print(f"  ✅ Optuna 최적 파라미터 사용")
+    else:
+        params = LGB_PARAMS
+        print(f"  ℹ️  기본 파라미터 사용")
+
+    # 시간 가중치: 최근 45일 강조
     max_date = train['sales_date'].max()
     days_from_max = (max_date - train['sales_date']).dt.days
     sample_weight = np.exp(-days_from_max / 45)   # 전체 학습 기준 최근 45일 강조
@@ -105,8 +212,9 @@ def train_model(train: pd.DataFrame, valid: pd.DataFrame):
     ]
 
     model = lgb.train(
-        params=LGB_PARAMS,
+        params=params,
         train_set=dtrain,
+        num_boost_round=10000,
         valid_sets=[dvalid],
         callbacks=callbacks,
     )
@@ -190,7 +298,10 @@ if __name__ == '__main__':
     df_enc  = encode_and_clean(df_feat)
     train, valid = split_data(df_enc)
 
-    model, wmape_log = train_model(train, valid)
+    # Optuna 실행 (n_trials 조정 가능, 1trial당 약 20~30초)
+    best_params, best_wmape = run_optuna(train, valid, n_trials=50)
+
+    model, wmape_log = train_model(train, valid, best_params)
     valid_result, total_wmape, bias_corr = evaluate(model, valid)
     feat_imp = print_feature_importance(model, top_n=20)
 

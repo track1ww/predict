@@ -221,6 +221,17 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
           .groupby([df['warehouse'], df['sku_name'], df['dayofweek']])
           .transform(lambda x: x.rolling(4, min_periods=1).mean())
     )
+    # 8주 요일 평균: 4주보다 안정적인 장기 요일 패턴
+    df['same_dow_8w_mean']   = (
+        df.groupby(key + ['dayofweek'])['qty']
+          .shift(1)
+          .groupby([df['warehouse'], df['sku_name'], df['dayofweek']])
+          .transform(lambda x: x.rolling(8, min_periods=1).mean())
+    )
+    # 단기 추세: 최근 7일 평균 / 이전 7일 평균 (1이면 보합, >1이면 상승)
+    roll7      = df.groupby(key)['qty'].transform(lambda x: x.shift(1).rolling(7, min_periods=1).mean())
+    roll7_prev = df.groupby(key)['qty'].transform(lambda x: x.shift(8).rolling(7, min_periods=1).mean())
+    df['qty_trend'] = (roll7 / (roll7_prev + 1e-9)).clip(0.5, 2.0)
 
     # ── 연휴 직후 전용 피처 ──────────────────────────────────
     # 연휴 직후 날짜(is_post_holiday)의 판매량만 추출하여 평균
@@ -300,7 +311,9 @@ FEATURE_COLS = [
     'rolling_mean_3', 'rolling_mean_7', 'rolling_mean_14', 'rolling_mean_28',
     'rolling_std_7', 'rolling_sum_7',
     # 요일 패턴
-    'same_dow_last_week', 'same_dow_4w_mean',
+    'same_dow_last_week', 'same_dow_4w_mean', 'same_dow_8w_mean',
+    # 단기 추세
+    'qty_trend',
     # 연휴 직후 전용
     'is_post_holiday', 'post_holiday_qty_mean',
 ]
@@ -445,6 +458,9 @@ def build_forecast_rows(df_raw: pd.DataFrame) -> pd.DataFrame:
             # 요일 패턴
             'same_dow_last_week': same_dow_lw,
             'same_dow_4w_mean'  : same_dow_4w,
+            'same_dow_8w_mean'  : dow_qty[-8:].mean() if len(dow_qty) >= 1 else lag_val(7),
+            # 단기 추세: 연휴 직후는 평상시 회귀 → 1.0에 가까움
+            'qty_trend'         : 1.0,
             # 연휴 직후 전용 (2026-01-02는 연말연시 직후 → is_post_holiday=1)
             'is_post_holiday'        : 1,
             'post_holiday_qty_mean'  : same_dow_4w,  # 근사값: 연휴직후 4주 요일평균
