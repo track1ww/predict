@@ -10,7 +10,7 @@
 <br/>
 
 [![WMAPE](https://img.shields.io/badge/WMAPE-8.33%25-brightgreen?style=flat-square&logo=checkmarx)](.)
-[![Target](https://img.shields.io/badge/목표-≤%2010%25-blue?style=flat-square)](.)
+[![Target](https://img.shields.io/badge/목표-≤%20WMAPE10%25-blue?style=flat-square)](.)
 [![SKU](https://img.shields.io/badge/발주%20SKU-3%2C686건-orange?style=flat-square)](.)
 [![Order](https://img.shields.io/badge/총%20발주권고량-313%2C508개-red?style=flat-square)](.)
 
