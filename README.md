@@ -64,7 +64,7 @@ inventory_data.parquet
 |---|---|
 | `load_data()` | Parquet 파일 로드, 기간/창고/SKU/카테고리 기본 통계 출력 |
 | `get_event_features()` | 날짜별 공휴일 가중치, 시즌 이벤트(추석·연말·여름) 피처 생성 |
-| `add_promo_features()` | 프로모션 3종(코리아세일·홀리데이마켓·컬리푸드페스타) 카테고리×날짜 교차 피처 |
+| `add_promo_features()` | 프로모션 3종 카테고리×날짜 교차 피처 |
 | `build_features()` | 날짜 기본 → 이벤트 → 프로모션 → Lag/Rolling → 요일 패턴 → 연휴직후 전용 피처까지 **전체 파이프라인 실행** |
 | `encode_and_clean()` | 카테고리 변수 Label Encoding, NaN 처리 |
 | `split_data()` | Train: 전체(7/1~12/31) / Valid: 연휴 직후 13일(광복절·추석·한글날 직후) |
