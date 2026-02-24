@@ -31,11 +31,11 @@ SEASON_EVENTS = [
 ]
 
 PROMOTIONS = [
-    {'name': '코리아세일페스타', 'start': '2025-11-01', 'end': '2025-11-30',
+    {'name': '프로모션1', 'start': '2025-11-01', 'end': '2025-11-30',
      'target_cats': ['적색육/소', '적색육/돼지', '가금육', '우유', '요구르트'], 'weight': 2.2},
-    {'name': '홀리데이마켓',    'start': '2025-11-01', 'end': '2025-12-26',
+    {'name': '프로모션2',    'start': '2025-11-01', 'end': '2025-12-26',
      'target_cats': ['적색육/소', '적색육/돼지', '냉동육', '과자'], 'weight': 1.8},
-    {'name': '컬리푸드페스타',  'start': '2025-12-18', 'end': '2025-12-29',
+    {'name': '프로모션3',  'start': '2025-12-18', 'end': '2025-12-29',
      'target_cats': ['가공식품', '라면/면', '육가공', '과자'], 'weight': 2.5},
 ]
 
@@ -113,15 +113,15 @@ def add_promo_features(df: pd.DataFrame) -> pd.DataFrame:
     """카테고리 × 날짜별 프로모션 피처 추가 (세분화)"""
     df['promo_weight']       = 1.0
     df['is_promo']           = 0
-    df['is_korea_sale']      = 0   # 코리아세일페스타 (육류/유제품, x2.2)
-    df['is_holiday_market']  = 0   # 홀리데이마켓 (육류/과자/냉동, x1.8)
-    df['is_kurly_festa']     = 0   # 컬리푸드페스타 (가공/라면/육가공/과자, x2.5)
+    df['promo1']      = 0 
+    df['promo2']  = 0   
+    df['promo3']     = 0   
     df['promo_log_weight']   = 0.0 # log(promo_weight): 비선형 효과 포착
 
     promo_flags = {
-        '코리아세일페스타': 'is_korea_sale',
-        '홀리데이마켓'   : 'is_holiday_market',
-        '컬리푸드페스타' : 'is_kurly_festa',
+        '프로모션1': 'promo1',
+        '프로모션2'   : 'promo2',
+        '프로모션3' : 'promo3',
     }
 
     for promo in PROMOTIONS:
