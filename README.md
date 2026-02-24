@@ -70,29 +70,7 @@ inventory_data.parquet
 | `split_data()` | Train: 전체(7/1~12/31) / Valid: 연휴 직후 13일(광복절·추석·한글날 직후) |
 | `build_forecast_rows()` | 2026-01-02 예측용 입력 행 생성 (16,500건) |
 
-**생성 피처 목록 (총 45개)**
 
-<details>
-<summary>펼쳐보기</summary>
-
-| 그룹 | 피처 |
-|---|---|
-| 날짜 | `dayofweek`, `dow_weight`, `month`, `day`, `weekofyear`, `is_weekday`, `is_thursday`, `is_monday` |
-| 이벤트 | `holiday_weight`, `is_holiday`, `season_weight`, `season_name`, `is_season_event` |
-| 프로모션 | `promo_weight`, `promo_log_weight`, `is_promo`, `is_korea_sale`, `is_holiday_market`, `is_kurly_festa` |
-| 복합 가중치 | `total_weight`, `total_weight_log`, `days_to_chuseok`, `days_to_yearend`, `days_to_bbaero` |
-| 카테고리 | `m_cat`, `cat_base_sales`, `warehouse`, `sku_name` |
-| 가격 | `price`, `price_volatility`, `price_lag1`, `price_change_pct` |
-| 재고 부족 | `stockout_lag1`, `stockout_lag7` |
-| Lag | `lag_1`, `lag_3`, `lag_7`, `lag_14` |
-| Rolling | `rolling_mean_3/7/14/28`, `rolling_std_7`, `rolling_sum_7` |
-| 요일 패턴 | `same_dow_last_week`, `same_dow_4w_mean`, `same_dow_8w_mean` |
-| 추세 | `qty_trend` |
-| 연휴 직후 | `is_post_holiday`, `post_holiday_qty_mean` |
-
-</details>
-
----
 
 ### `demand_forecast_part2_train.py` — LightGBM 모델 학습 & WMAPE 검증
 
