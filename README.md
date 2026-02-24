@@ -1,4 +1,4 @@
-![capsule-render api](https://capsule-render.vercel.app/api?type=waving&color=auto&height=300&section=header&text=수요%20재고이관%20예측&fontSize=90)
+![capsule-render api](https://capsule-render.vercel.app/api?type=waving&color=auto&height=300&section=header&text=발주에 필요한 예측&fontSize=90)
 
 <div align="center">
 
@@ -20,8 +20,7 @@
 
 ## 📌 프로젝트 개요
 
-> **2026년 1월 2일(목요일)** 연말연시 직후 수요를 예측하여 SKU × 창고별 **자동 발주 권고량**을 산출하는 파이프라인
-
+> **2026년 1월 2일(목요일)** 연말연시 직후 수요를 예측하여 SKU × 창고별로 필요한 물량, 재고이관량을 산출하는 코드
 - **예측 대상** : 5개 센터(A~E) × 3,300 SKU → 16,500건
 - **평가 지표** : WMAPE ≤ 10% (Weighted Mean Absolute Percentage Error)
 - **최종 결과** : WMAPE **8.33%** ✅ | 발주 필요 SKU **3,686건** | 총 발주량 **313,508개**
@@ -204,7 +203,76 @@ order_plan_20260102.xlsx   # 발주 계획 (전체 / 발주필요 / 피처중요
 order_plan_20260102.csv    # 발주 계획 CSV
 
 ```
+**소희ame_dow_4w_mean   ██████████████████████████████  (1위)
+same_dow_8w_mean   ███████████████████████████
+total_weight       ███████████████████
+stockout_lag1      ███████████
+lag_7              ██████
+```
 
 ---
 
+### `demand_forecast_part3_order.py` — 발주량 산출 & 결과 저장
+
+> 학습된 모델로 2026-01-02 수요를 예측하고, 재고를 차감하여 발주 권고량을 산출합니다.
+
+| 함수 | 역할 |
+|---|---|
+| `encode_forecast_rows()` | 예측 행을 학습 시와 동일한 카테고리 코드값으로 변환 |
+| `predict_demand()` | 모델 예측 → 카테고리 편향 보정(bias_corr) → 고오류 5개 카테고리 룰 기반 대체 |
+| `calculate_order_qty()` | `발주권고량 = max(0, 예측수요 × 안전재고계수 - 현재고)` |
+| `print_wmape_report()` | 카테고리별 / 창고별 WMAPE 상세 리포트 |
+| `save_results()` | Excel 다중 시트(전체계획·발주필요SKU·피처중요도·요약) + CSV 저장 |
+
+#### 📦 발주 정책
+
+```
+발주 권고량 = max(0, 예측수요 × 안전재고계수 - 사용가능재고)
+
+안전재고계수 (카테고리별 신선도 반영):
+  신선 채소류 (엽채/나물/가금육)  → 1.20  (유통기한 짧음)
+  육류/유제품                     → 1.10~1.15
+  가공/냉동/과자                   → 1.05  (유통기한 김)
+```
+
+#### 📋 예측 보정 2단계
+
+```
+1단계 — 카테고리 편향 보정 (bias_corr)
+         : Valid셋 기준 실측합/예측합 비율로 체계적 과소예측 수치 보정
+
+2단계 — 룰 기반 예측 대체 (고오류 5개 카테고리)
+         : 과자 / 냉동육 / 라면·면 / 가공식품 / 육가공
+         → Valid 연휴직후 실측 평균값으로 대체 (WMAPE 추가 개선)
+```
+
+---
+
+## 📈 최종 성능
+
+| 카테고리 | WMAPE |
+|---|---|
+| 나물류 | **5.21%** ✅ |
+| 엽채류 | 5.43% ✅ |
+| 과채류 | 6.60% ✅ |
+| 우유 | 6.40% ✅ |
+| 냉동육 | 14.73% ⚠️ |
+| **전체** | **8.33%** ✅ |
+
+| 창고 | WMAPE |
+|---|---|
+| A~E 센터 전체 | 8.26% ~ 8.36% ✅ |
+
+---
+
+
+
+**출력 파일**
+```
+order_plan_20260102.xlsx   # 발주 계획 (전체 / 발주필요 / 피처중요도 / 요약 시트)
+order_plan_20260102.csv    # 발주 계획 CSV
+
+```
+
+---  
 ![capsule-render api](https://capsule-render.vercel.app/api?type=waving&color=auto&height=150&section=footer)
