@@ -196,25 +196,7 @@ lag_7              ██████
 
 ---
 
-## 🚀 실행 방법
 
-```bash
-# 의존성 설치
-pip install lightgbm optuna pandas numpy joblib openpyxl pyarrow
-
-# 전체 파이프라인 실행 (Part 1~3 순차 실행)
-python demand_forecast_part3_order.py
-
-# 개별 실행
-python demand_forecast_part1_features.py   # 피처 확인
-python demand_forecast_part2_train.py      # 모델 학습만
-```
-
-**필요 입력 파일**
-```
-sales_data.parquet      # 판매 이력 (2025-07-01 ~ 2025-12-31)
-inventory_data.parquet  # 현재고 (창고 × SKU)
-```
 
 **출력 파일**
 ```
