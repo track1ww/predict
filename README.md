@@ -1,4 +1,4 @@
-![capsule-render api](https://capsule-render.vercel.app/api?type=waving&color=auto&height=300&section=header&text=발주에&필요한 예측&fontSize=90)
+![capsule-render api](https://capsule-render.vercel.app/api?type=waving&color=auto&height=300&section=header&text=발주에%필요한%예측&fontSize=90)
 
 <div align="center">
 
