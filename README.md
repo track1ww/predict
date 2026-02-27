@@ -253,5 +253,7 @@ order_plan_20260102.csv    # 발주 계획 CSV
 
 ```
 
----  
-![capsule-render api](https://capsule-render.vercel.app/api?type=waving&color=auto&height=300&section=footer)
+---
+
+
+![footer](https://capsule-render.vercel.app/api?type=waving&color=auto&height=300&section=footer)
