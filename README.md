@@ -244,9 +244,8 @@ lag_7              ██████
 ---
 
 
-
+##
 **출력 파일**
----
 ```
 
 order_plan_20260102.xlsx   # 발주 계획 (전체 / 발주필요 / 피처중요도 / 요약 시트)
@@ -254,8 +253,6 @@ order_plan_20260102.xlsx   # 발주 계획 (전체 / 발주필요 / 피처중요
 order_plan_20260102.csv    # 발주 계획 CSV
 
 ```
-
----
 
 
 ![footer](https://capsule-render.vercel.app/api?type=waving&color=auto&height=300&section=footer)
